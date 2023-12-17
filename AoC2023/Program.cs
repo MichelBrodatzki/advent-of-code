@@ -30,11 +30,20 @@ namespace AoC2023
             Console.WriteLine("");
         }
         
+        private static void RunDay04(List<string> puzzleInput)
+        {
+            Console.WriteLine("--- DAY 04 ---");
+            Console.WriteLine($"Problem 01: {Day04.Problem01(puzzleInput)}");
+            Console.WriteLine($"Problem 02: {Day04.Problem02(puzzleInput)}");
+            Console.WriteLine("");
+        }
+        
         public static void Main(string[] args)
         {
             RunDay01(Tools.GetPuzzleInput("../../../Inputs/Day01.txt"));
             RunDay02(Tools.GetPuzzleInput("../../../Inputs/Day02.txt"));
             RunDay03(Tools.GetPuzzleInput("../../../Inputs/Day03.txt"));
+            RunDay04(Tools.GetPuzzleInput("../../../Inputs/Day04.txt"));
         }
     }
 }
