@@ -1,4 +1,5 @@
 ﻿using System.Text.RegularExpressions;
+using AoC;
 
 namespace AoC2023
 {
@@ -6,6 +7,22 @@ namespace AoC2023
     {
         public partial class Almanac
         {
+            public class PathNotFoundException : Exception
+            {
+                public PathNotFoundException(string message) 
+                    : base(message)
+                {
+                }
+            }
+
+            public class MapNotFoundException : Exception
+            {
+                public MapNotFoundException(string message)
+                    : base(message)
+                {
+                }
+            }
+            
             public struct CategoryMap
             {
                 public string Source;
@@ -22,9 +39,16 @@ namespace AoC2023
 
             private readonly Dictionary<CategoryMap, Dictionary<Range, Range>> _maps = new();
 
-            /**
-             * <summary>Parses a line containing the seeds and adds it to this class' seed array.</summary>
-             */
+            /// <summary>
+            /// Parses a line containing the seeds and adds it to this class' seed array.
+            /// </summary>
+            /// <param name="seedLine">The line containing the seed numbers to parse</param>
+            /// <param name="useSeedRange">
+            /// Set to true, if every second number is a range length and not another seed
+            /// </param>
+            /// <exception cref="InputFileInvalidException">
+            /// Thrown when <c>seedLine</c> isn't a line containing seed numbers.
+            /// </exception>
             private void ParseSeeds(string seedLine, bool useSeedRange = false)
             {
                 if (!seedLine.StartsWith("seeds:")) return;
@@ -32,6 +56,7 @@ namespace AoC2023
                 var splitLine = seedLine.Split(":");
                 if (splitLine.Length != 2) return;
 
+                // Problem 02 needs a different parsing algorithm
                 if (!useSeedRange)
                 {
                     splitLine[1]
@@ -52,7 +77,7 @@ namespace AoC2023
                         .ToList();
 
                     if (numbers.Count % 2 != 0) 
-                        throw new Exception("Input file isn't correctly structured at seeds");
+                        throw new InputFileInvalidException("Input file isn't correctly structured at seeds");
 
                     for (var seedIndex = 0; seedIndex < numbers.Count; seedIndex += 2)
                     {
@@ -65,6 +90,13 @@ namespace AoC2023
                 }
             }
             
+            /// <summary>
+            /// Constructor for the almanac.
+            /// </summary>
+            /// <param name="almanac">Lines of the almanac</param>
+            /// <param name="useSeedRange">
+            /// Set to true, if every second number is a range length and not another seed
+            /// </param>
             public Almanac(List<string> almanac, bool useSeedRange = false)
             {
                 var currentMap = new CategoryMap() { Source = "", Destination = "" };
@@ -78,6 +110,7 @@ namespace AoC2023
                         return;
                     }
 
+                    // Don't just take the example maps, as there could be more in the real input
                     var categoryMatch = CategoryRegex().Match(line);
                     if (categoryMatch.Success)
                     {
@@ -91,8 +124,10 @@ namespace AoC2023
                         return;
                     }
 
+                    // Stop here if the currentMap isn't set properly
                     if (currentMap.Source == "" || currentMap.Destination == "") return;
                     
+                    // Parse mapping line
                     var mapMatch = MapRegex().Match(line);
                     if (!mapMatch.Success) return;
 
@@ -113,10 +148,27 @@ namespace AoC2023
                 });
             }
 
+            /// <summary>
+            /// Finds a mapped path between <c>sourceCategory</c> and <c>destinationCategory</c>.
+            /// It's mandatory that there's only one way from source to destination. 
+            /// </summary>
+            /// <param name="sourceCategory">Name of the source category</param>
+            /// <param name="destinationCategory">Name of the destination category</param>
+            /// <returns>
+            /// Returns the names of the maps between <c>sourceCategory</c> and <c>destinationCategory</c>
+            /// including both.
+            /// </returns>
+            /// <exception cref="InputFileInvalidException">
+            /// Thrown when the input file isn't structured properly.
+            /// </exception>
+            /// <exception cref="PathNotFoundException">
+            /// Thrown if no path between <c>sourceCategory</c> and <c>destinationCategory</c> has been found.
+            /// </exception>
             private List<string> FindPath(string sourceCategory, string destinationCategory)
             {
                 var path = new List<string>() { sourceCategory };
 
+                // Catch infinite loops if a path element isn't found
                 var foundAnythingInCurrentPass = true;
                 while (path.Last() != destinationCategory && foundAnythingInCurrentPass)
                 {
@@ -125,30 +177,57 @@ namespace AoC2023
                         .ToList();
                     
                     // In this case mapping is a one-to-one relationship
-                    if (nextStep.Count > 1) throw new Exception("Mapping is not one-to-one");
+                    if (nextStep.Count > 1) throw new InputFileInvalidException("Mapping is not one-to-one");
                     
                     foundAnythingInCurrentPass = nextStep.Any();
                     
                     if (nextStep.Any()) path.Add(nextStep.First().Key.Destination);
                 }
 
-                if (path.Last() != destinationCategory) throw new Exception("Path not found!");
+                // If the path isn't complete, error out
+                if (path.Last() != destinationCategory) throw new PathNotFoundException("Path not found!");
                 
                 return path;
             }
 
+            /// <summary>
+            /// Finds and returns the map between <c>sourceCategory</c> and <c>destinationCategory</c>
+            /// </summary>
+            /// <param name="sourceCategory"></param>
+            /// <param name="destinationCategory"></param>
+            /// <returns>Map between <c>sourceCategory</c> and <c>destinationCategory</c></returns>
+            /// <exception cref="MapNotFoundException">
+            /// Thrown when no map between <c>sourceCategory</c> and <c>destinationCategory</c> was found
+            /// </exception>
+            /// <exception cref="InputFileInvalidException">
+            /// Thrown when the input file isn't structured properly.
+            /// </exception>
             private Dictionary<Range, Range> GetMap(string sourceCategory, string destinationCategory)
             {
                 var relevantMap = _maps
                     .Where(map =>
                         map.Key.Source == sourceCategory && map.Key.Destination == destinationCategory)
                     .ToList();
-                
-                if (relevantMap.Count != 1) throw new Exception("Maps are not unique");
+
+                if (relevantMap.Count == 0)
+                    throw new MapNotFoundException(
+                        $"Map from {sourceCategory} to {destinationCategory} not found"
+                        );
+                if (relevantMap.Count != 1) throw new InputFileInvalidException("Maps are not unique");
 
                 return relevantMap.First().Value;
             }
             
+            /// <summary>
+            /// Returns the mapped ranges from <c>sourceCategory</c> to <c>destinationCategory</c>
+            /// </summary>
+            /// <param name="sourceCategory">The source category</param>
+            /// <param name="destinationCategory">The destination category</param>
+            /// <param name="sourceValues">The values to be mapped</param>
+            /// <returns>Mapped values from <c>sourceCategory</c> to <c>destinationCategory</c></returns>
+            /// <exception cref="InputFileInvalidException">
+            /// Thrown when the input file isn't structured properly.
+            /// </exception>
             private IEnumerable<Range> Get(string sourceCategory, string destinationCategory, List<Range> sourceValues)
             {
                 var path = FindPath(sourceCategory, destinationCategory);
@@ -172,7 +251,7 @@ namespace AoC2023
                                     map.Key.End >= remainingSourceRange.Start)
                                 .ToList();
                             
-                            if (mapCandidates.Count > 1) throw new Exception("Map has more than one mapping");
+                            if (mapCandidates.Count > 1) throw new InputFileInvalidException("Map has more than one mapping");
                             
                             if (!mapCandidates.Any())
                             {
@@ -230,11 +309,16 @@ namespace AoC2023
                 return sourceValues;
             }
             
+            /// <summary>
+            /// Returns the mapped to <c>category</c> ranges from the input seeds of the Almanac.
+            /// </summary>
+            /// <param name="category">The destination category</param>
+            /// <returns>Mapped ranges</returns>
             public IEnumerable<Range> GetFromInputSeeds(string category)
             {
                 return Get("seed", category, _seeds);
             }
-
+            
             [GeneratedRegex(@"^(?<sourceCategory>\w+)-to-(?<destinationCategory>\w+) map:$", 
                 RegexOptions.IgnoreCase)]
             private static partial Regex CategoryRegex();
@@ -244,6 +328,11 @@ namespace AoC2023
             private static partial Regex MapRegex();
         }
         
+        /// <summary>
+        /// Treats the seed line as seperate seeds and returns the lowest location number.
+        /// </summary>
+        /// <param name="puzzleInput">The almanac in text form</param>
+        /// <returns>Lowest location number after mapping</returns>
         public static long Problem01(List<string> puzzleInput)
         {
             var islandIslandsAlmanac = new Almanac(puzzleInput);
@@ -254,6 +343,11 @@ namespace AoC2023
                 .Min();
         }
 
+        /// <summary>
+        /// Treats the seed line as seeds with their range lengths and returns the lowest location number.
+        /// </summary>
+        /// <param name="puzzleInput">The almanac in text form</param>
+        /// <returns>Lowest location number after mapping</returns>
         public static long Problem02(List<string> puzzleInput)
         {
             var islandIslandsAlmanac = new Almanac(puzzleInput, true);
